@@ -37,7 +37,7 @@ previewOut = pipeline.createXLinkOut()
 
 
 # Properties
-colorCam.setVideoSize(640, 360)
+# colorCam.setVideoSize(640, 360)  # commented out to see `video` at 1080p. Uncomment to test WASD pan controls
 colorCam.setPreviewSize(300, 300)
 controlIn.setStreamName('control')
 configIn.setStreamName('config')
@@ -94,6 +94,45 @@ with dai.Device(pipeline) as dev:
     sens_min = 100
     sens_max = 1600
 
+    # TODO how can we make the enums automatically iterable?
+    awb_mode_idx = -1
+    awb_mode_list = [
+        dai.CameraControl.AutoWhiteBalanceMode.OFF,
+        dai.CameraControl.AutoWhiteBalanceMode.AUTO,
+        dai.CameraControl.AutoWhiteBalanceMode.INCANDESCENT,
+        dai.CameraControl.AutoWhiteBalanceMode.FLUORESCENT,
+        dai.CameraControl.AutoWhiteBalanceMode.WARM_FLUORESCENT,
+        dai.CameraControl.AutoWhiteBalanceMode.DAYLIGHT,
+        dai.CameraControl.AutoWhiteBalanceMode.CLOUDY_DAYLIGHT,
+        dai.CameraControl.AutoWhiteBalanceMode.TWILIGHT,
+        dai.CameraControl.AutoWhiteBalanceMode.SHADE,
+    ]
+
+    anti_banding_mode_idx = -1
+    anti_banding_mode_list = [
+        dai.CameraControl.AntiBandingMode.OFF,
+        dai.CameraControl.AntiBandingMode.MAINS_50_HZ,
+        dai.CameraControl.AntiBandingMode.MAINS_60_HZ,
+        dai.CameraControl.AntiBandingMode.AUTO,
+    ]
+
+    effect_mode_idx = -1
+    effect_mode_list = [
+        dai.CameraControl.EffectMode.OFF,
+        dai.CameraControl.EffectMode.MONO,
+        dai.CameraControl.EffectMode.NEGATIVE,
+        dai.CameraControl.EffectMode.SOLARIZE,
+        dai.CameraControl.EffectMode.SEPIA,
+        dai.CameraControl.EffectMode.POSTERIZE,
+        dai.CameraControl.EffectMode.WHITEBOARD,
+        dai.CameraControl.EffectMode.BLACKBOARD,
+        dai.CameraControl.EffectMode.AQUA,
+    ]
+
+    ae_comp = 0  # Valid: -9 .. +9
+    ae_lock = False
+    awb_lock = False
+
     while True:
 
         previewFrames = previewQueue.tryGetAll()
@@ -130,6 +169,47 @@ with dai.Device(pipeline) as dev:
         elif key == ord('c'):
             ctrl = dai.CameraControl()
             ctrl.setCaptureStill(True)
+            controlQueue.send(ctrl)
+        elif key == ord('1'):
+            awb_mode_idx = (awb_mode_idx + 1) % len(awb_mode_list)
+            awb_mode = awb_mode_list[awb_mode_idx]
+            print("Auto white balance mode:", awb_mode)
+            ctrl = dai.CameraControl()
+            ctrl.setAutoWhiteBalanceMode(awb_mode)
+            controlQueue.send(ctrl)
+        elif key == ord('2'):
+            awb_lock = not awb_lock
+            print("Auto white balance lock:", awb_lock)
+            ctrl = dai.CameraControl()
+            ctrl.setAutoWhiteBalanceLock(awb_lock)
+            controlQueue.send(ctrl)
+        elif key == ord('3') or key == ord('4'):
+            if key == ord('3'): ae_comp -= 1
+            if key == ord('4'): ae_comp += 1
+            ae_comp = clamp(ae_comp, -9, 9)
+            print("Auto exposure compensation:", ae_comp)
+            ctrl = dai.CameraControl()
+            ctrl.setAutoExposureCompensation(ae_comp)
+            controlQueue.send(ctrl)
+        elif key == ord('5'):
+            ae_lock = not ae_lock
+            print("Auto exposure lock:", ae_lock)
+            ctrl = dai.CameraControl()
+            ctrl.setAutoExposureLock(ae_lock)
+            controlQueue.send(ctrl)
+        elif key == ord('6'):
+            anti_banding_mode_idx = (anti_banding_mode_idx + 1) % len(anti_banding_mode_list)
+            anti_banding_mode = anti_banding_mode_list[anti_banding_mode_idx]
+            print("Anti-banding mode:", anti_banding_mode)
+            ctrl = dai.CameraControl()
+            ctrl.setAntiBandingMode(anti_banding_mode)
+            controlQueue.send(ctrl)
+        elif key == ord('7'):
+            effect_mode_idx = (effect_mode_idx + 1) % len(effect_mode_list)
+            effect_mode = effect_mode_list[effect_mode_idx]
+            print("Effect mode:", effect_mode)
+            ctrl = dai.CameraControl()
+            ctrl.setEffectMode(effect_mode)
             controlQueue.send(ctrl)
         elif key == ord('t'):
             print("Autofocus trigger (and disable continuous)")
