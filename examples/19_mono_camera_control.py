@@ -63,6 +63,18 @@ with dai.Device(pipeline) as device:
     sens_min = 100
     sens_max = 1600
 
+    manual_enabled = False
+
+    # Auto-exposure region
+    reg_enabled = False
+    reg_width = 200
+    reg_height = 150
+    reg_step = 40
+    reg_start_x = 0
+    reg_start_y = 0
+    reg_start_x_max = cam_left.getResolutionWidth()  - 1 - reg_width
+    reg_start_y_max = cam_left.getResolutionHeight() - 1 - reg_height
+
     frame_left = None
     frame_right = None
 
@@ -75,6 +87,12 @@ with dai.Device(pipeline) as device:
             # if the data from the left camera is available, transform the 1D data into a frame
             frame_left = in_left.getData().reshape((in_left.getHeight(), in_left.getWidth())).astype(np.uint8)
             frame_left = np.ascontiguousarray(frame_left)
+            if reg_enabled:
+                # Draw the auto-exposure region on the frame
+                cv2.rectangle(frame_left,
+                              (reg_start_x, reg_start_y),
+                              (reg_start_x + reg_width, reg_start_y + reg_height),
+                              (255, 255, 255), 2)
 
         if in_right is not None:
             # if the data from the right camera is available, transform the 1D data into a frame
@@ -101,8 +119,29 @@ with dai.Device(pipeline) as device:
             ctrl = dai.CameraControl()
             ctrl.setManualExposure(exp_time, sens_iso)
             controlQueue.send(ctrl)
+            manual_enabled = True
+            reg_enabled = False
         elif key == ord('e'):
             print("Autoexposure enable")
             ctrl = dai.CameraControl()
             ctrl.setAutoExposureEnable()
             controlQueue.send(ctrl)
+            manual_enabled = False
+            reg_enabled = False
+        elif key in [ord('w'), ord('a'), ord('s'), ord('d')]:
+            if key == ord('a'): reg_start_x -= reg_step
+            if key == ord('d'): reg_start_x += reg_step
+            if key == ord('w'): reg_start_y -= reg_step
+            if key == ord('s'): reg_start_y += reg_step
+            reg_start_x = clamp(reg_start_x, 0, reg_start_x_max)
+            reg_start_y = clamp(reg_start_y, 0, reg_start_y_max)
+            print("Setting auto-exposure region start:", reg_start_x, 'x', reg_start_y)
+            ctrl = dai.CameraControl()
+            if manual_enabled:
+                # Switch back to auto.
+                # The check is a small optimization, could be always called.
+                ctrl.setAutoExposureEnable()
+                manual_enabled = True
+            ctrl.setAutoExposureRegion(reg_start_x, reg_start_y, reg_width, reg_height)
+            controlQueue.send(ctrl)
+            reg_enabled = True
