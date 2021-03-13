@@ -19,8 +19,8 @@ cam.setBoardSocket(dai.CameraBoardSocket.RGB)
 cam.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 
 videoEncoder = pipeline.createVideoEncoder()
-videoEncoder.setDefaultProfilePreset(1920, 1080, 30, dai.VideoEncoderProperties.Profile.H265_MAIN)
-cam.video.link(videoEncoder.input)
+videoEncoder.setDefaultProfilePreset(640, 400, 30, dai.VideoEncoderProperties.Profile.H265_MAIN)
+#cam.video.link(videoEncoder.input)
 
 videoOut = pipeline.createXLinkOut()
 videoOut.setStreamName('h265')
@@ -48,6 +48,7 @@ detection_nn.setBlobPath(mobilenet_path)
 xout_depth = pipeline.createXLinkOut()
 xout_depth.setStreamName("depth")
 depth.disparity.link(xout_depth.input)
+depth.disparity.link(videoEncoder.input)
 
 xout_right = pipeline.createXLinkOut()
 xout_right.setStreamName("rect_right")
