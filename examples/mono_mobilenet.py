@@ -24,7 +24,7 @@ pipeline = dai.Pipeline()
 pipeline.setOpenVINOVersion(dai.OpenVINO.Version.VERSION_2021_2)
 
 # Define sources and outputs
-monoRight = pipeline.createMonoCamera()
+monoRight = pipeline.createColorCamera()
 manip = pipeline.createImageManip()
 nn = pipeline.createMobileNetDetectionNetwork()
 manipOut = pipeline.createXLinkOut()
@@ -34,21 +34,27 @@ manipOut.setStreamName("right")
 nnOut.setStreamName("nn")
 
 # Properties
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
-monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
+monoRight.setBoardSocket(dai.CameraBoardSocket.RGB)
+monoRight.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 
 # Convert the grayscale frame into the nn-acceptable form
 manip.initialConfig.setResize(300, 300)
 # The NN model expects BGR input. By default ImageManip output type would be same as input (gray in this case)
-manip.initialConfig.setFrameType(dai.ImgFrame.Type.BGR888p)
-
+if 1:  # RGB/BGR 3-plane for NN
+    manip.initialConfig.setFrameType(dai.ImgFrame.Type.BGR888p)
+else:  # RAW8 / GRAY8 (NN would complain it's single plane)
+    manip.initialConfig.setFrameType(dai.ImgFrame.Type.GRAY8)
 nn.setConfidenceThreshold(0.5)
 nn.setBlobPath(nnPath)
 nn.setNumInferenceThreads(2)
 nn.input.setBlocking(False)
 
 # Linking
-monoRight.out.link(manip.inputImage)
+#  `isp` / `video` / `still` will work, but outputting grayscale
+if 1:
+    monoRight.video.link(manip.inputImage)
+else:
+    monoRight.isp.link(manip.inputImage)
 manip.out.link(nn.input)
 manip.out.link(manipOut.input)
 nn.out.link(nnOut.input)
