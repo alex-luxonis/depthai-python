@@ -8,6 +8,10 @@ import datetime
 import argparse
 from pathlib import Path
 
+# Custom JET colormap with 0 mapped to `black` - better disparity visualization
+jet_custom = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+jet_custom[0] = [0, 0, 0]
+
 datasetDefault = str((Path(__file__).parent / Path('models/dataset')).resolve().absolute())
 parser = argparse.ArgumentParser()
 parser.add_argument('-dataset', nargs='?', help="Path to recorded frames", default=datasetDefault)
@@ -50,11 +54,14 @@ class depthHandler:
             print(f"Changing median to {nextMedian.name} from {currentMedian.name}")
         self.sendConfig(stereoDepthConfigInQueue)
 
-    def __init__(self, _confidence, _sigma, _lrCheckThreshold):
+    def __init__(self, _confidence, _sigma, _lrCheckThreshold, _median):
         print("Control median filter using the 'm' key.")
         print("Use slider to adjust disparity confidence.")
         print("Use slider to adjust bilateral filter intensity.")
         print("Use slider to adjust left-right check threshold.")
+
+        # Bugfix for median getting changed without being requested
+        self.currentConfig.setMedianFilter(_median)
 
         self._confidence = _confidence
         self._sigma = _sigma
@@ -81,7 +88,7 @@ out_rectified = True   # Output and display rectified streams
 lrcheck = True   # Better handling for occlusions
 extended = False  # Closer-in minimum depth, disparity range is doubled
 subpixel = False   # Better accuracy for longer distance, fractional disparity 32-levels
-median = dai.MedianFilter.KERNEL_7x7
+median = dai.MedianFilter.MEDIAN_OFF
 
 # Sanitize some incompatible options
 if extended or subpixel:
@@ -119,7 +126,7 @@ def create_stereo_depth_pipeline():
     monoLeft.setStreamName('in_left')
     monoRight.setStreamName('in_right')
 
-    stereo.initialConfig.setConfidenceThreshold(200)
+    stereo.initialConfig.setConfidenceThreshold(230)
     stereo.setRectifyEdgeFillColor(0) # Black, to better see the cutout
     stereo.initialConfig.setMedianFilter(median) # KERNEL_7x7 default
     stereo.setLeftRightCheck(lrcheck)
@@ -130,8 +137,7 @@ def create_stereo_depth_pipeline():
     _confidence=stereo.initialConfig.getConfidenceThreshold()
     _sigma=stereo.initialConfig.getBilateralFilterSigma()
     _lrCheckThreshold=stereo.initialConfig.getLeftRightCheckThreshold()
-    depth_handler = depthHandler(_confidence, _sigma, _lrCheckThreshold)
-
+    depth_handler = depthHandler(_confidence, _sigma, _lrCheckThreshold, median)
 
     stereo.setInputResolution(1280, 720)
     stereo.setRectification(False)
@@ -179,7 +185,7 @@ def convert_to_cv2_frame(name, image):
         depthFrame = image.getFrame()
         depthFrameColor = cv2.normalize(depthFrame, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
         depthFrameColor = cv2.equalizeHist(depthFrameColor)
-        depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_HOT)
+        depthFrameColor = cv2.applyColorMap(depthFrameColor, jet_custom)
         frame = depthFrameColor
     elif name == 'disparity':
         disp = np.array(data).astype(np.uint8).view(disp_type).reshape((h, w))
@@ -192,7 +198,7 @@ def convert_to_cv2_frame(name, image):
             frame = (disp * 255. / max_disp).astype(np.uint8)
 
         if 1: # Optionally, apply a color map
-            frame = cv2.applyColorMap(frame, cv2.COLORMAP_HOT)
+            frame = cv2.applyColorMap(frame, jet_custom)
 
     else: # mono streams / single channel
         frame = np.array(data).reshape((h, w)).astype(np.uint8)
@@ -233,12 +239,14 @@ with dai.Device(pipeline) as device:
             dataset_size = 1  # Number of image pairs
             frame_interval_ms = 500
             for i, q in enumerate(in_q_list):
+                #path = args.dataset + '/' + str(index) + '/' + q.getName() + '.png'
                 path = args.dataset + '/rect_' + q.getName().split('_')[1] + '_201.png'
                 print(path)
                 data = cv2.imread(path, cv2.IMREAD_GRAYSCALE).reshape((720,1280))
                 if q.getName() == 'in_right':
-                    M = np.float32([[1, 0, 0], [0, 1, shift/10]])
-                    data = cv2.warpAffine(data, M, (data.shape[1], data.shape[0]))
+                    if shift != 0:
+                        M = np.float32([[1, 0, 0], [0, 1, shift/10]])
+                        data = cv2.warpAffine(data, M, (data.shape[1], data.shape[0]))
                     #data = np.roll(data, shift, axis=[0])
                 tstamp = datetime.timedelta(seconds = timestamp_ms // 1000,
                                             milliseconds = timestamp_ms % 1000)
