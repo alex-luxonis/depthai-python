@@ -196,7 +196,8 @@ def convert_to_cv2_frame(name, image):
 
     else: # mono streams / single channel
         frame = np.array(data).reshape((h, w)).astype(np.uint8)
-        if name.startswith('rectified_'):
+        # With LR-check the rectified isn't flipped
+        if name.startswith('rectified_') and not lrcheck:
             frame = cv2.flip(frame, 1)
         if name == 'rectified_right':
             last_rectif_right = frame
@@ -204,6 +205,7 @@ def convert_to_cv2_frame(name, image):
 
 pipeline, streams = create_stereo_depth_pipeline()
 
+shift = 0
 print("Connecting and starting the pipeline")
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
@@ -231,8 +233,13 @@ with dai.Device(pipeline) as device:
             dataset_size = 1  # Number of image pairs
             frame_interval_ms = 500
             for i, q in enumerate(in_q_list):
-                path = args.dataset + '/' + str(index) + '/' + q.getName() + '.png'
-                data = cv2.imread(path, cv2.IMREAD_GRAYSCALE).reshape(720*1280)
+                path = args.dataset + '/rect_' + q.getName().split('_')[1] + '_201.png'
+                print(path)
+                data = cv2.imread(path, cv2.IMREAD_GRAYSCALE).reshape((720,1280))
+                if q.getName() == 'in_right':
+                    M = np.float32([[1, 0, 0], [0, 1, shift/10]])
+                    data = cv2.warpAffine(data, M, (data.shape[1], data.shape[0]))
+                    #data = np.roll(data, shift, axis=[0])
                 tstamp = datetime.timedelta(seconds = timestamp_ms // 1000,
                                             milliseconds = timestamp_ms % 1000)
                 img = dai.ImgFrame()
@@ -261,4 +268,6 @@ with dai.Device(pipeline) as device:
         key = cv2.waitKey(1)
         if key == ord('q'):
             break
+        elif key == ord('w'): shift -= 1
+        elif key == ord('s'): shift += 1
         depth_handler.handleKeypress(key, stereoDepthConfigInQueue)
