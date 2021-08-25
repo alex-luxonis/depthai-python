@@ -21,7 +21,7 @@ STEP_SIZE = 8
 # Manual exposure/focus set step
 EXP_STEP = 500  # us
 ISO_STEP = 50
-LENS_STEP = 3
+LENS_STEP = 15
 
 def clamp(num, v0, v1):
     return max(v0, min(num, v1))
@@ -84,6 +84,7 @@ with dai.Device(pipeline) as device:
     lensPos = 150
     lensMin = 0
     lensMax = 255
+    lensDir = 1
 
     expTime = 20000
     expMin = 1
@@ -96,6 +97,14 @@ with dai.Device(pipeline) as device:
     while True:
         previewFrames = previewQueue.tryGetAll()
         for previewFrame in previewFrames:
+            lensPos += lensDir * LENS_STEP
+            lensPos = clamp(lensPos, lensMin, lensMax)
+            print("Setting manual focus, lens position: ", lensPos)
+            ctrl = dai.CameraControl()
+            ctrl.setManualFocus(lensPos)
+            controlQueue.send(ctrl)
+            if lensPos == lensMin: lensDir = 1
+            if lensPos == lensMax: lensDir = -1
             cv2.imshow('preview', previewFrame.getData().reshape(previewFrame.getWidth(), previewFrame.getHeight(), 3))
 
         videoFrames = videoQueue.tryGetAll()
