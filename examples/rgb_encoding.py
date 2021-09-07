@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 
+''' Run as:
+python3 examples/rgb_encoding.py | ffplay -framerate 60 -fflags nobuffer -flags low_delay -framedrop -strict experimental -
+
+'''
+
 import depthai as dai
+import sys
 
 # Create pipeline
 pipeline = dai.Pipeline()
 
 # Define sources and output
 camRgb = pipeline.createColorCamera()
+# TODO need to test more if 30 FPS can be achieved realtime (without lag) at 4K
+camRgb.setFps(28) # 29, 30
 videoEnc = pipeline.createVideoEncoder()
 xout = pipeline.createXLinkOut()
 
@@ -15,7 +23,8 @@ xout.setStreamName('h265')
 # Properties
 camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
 camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_4_K)
-videoEnc.setDefaultProfilePreset(3840, 2160, 30, dai.VideoEncoderProperties.Profile.H265_MAIN)
+# H.265 decoding seems to be slower on some hardware, change to H.264 for now. Might be ffplay related
+videoEnc.setDefaultProfilePreset(3840, 2160, 30, dai.VideoEncoderProperties.Profile.H264_MAIN)
 
 # Linking
 camRgb.video.link(videoEnc.input)
@@ -33,7 +42,9 @@ with dai.Device(pipeline) as device:
         try:
             while True:
                 h265Packet = q.get()  # Blocking call, will wait until a new data has arrived
-                h265Packet.getData().tofile(videoFile)  # Appends the packet data to the opened file
+                data = h265Packet.getData()
+                data.tofile(videoFile)  # Appends the packet data to the opened file
+                sys.stdout.buffer.write(data) # Write to stdout, note need to pipe into a player
         except KeyboardInterrupt:
             # Keyboard interrupt (Ctrl + C) detected
             pass
