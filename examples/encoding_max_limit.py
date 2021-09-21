@@ -1,73 +1,65 @@
 #!/usr/bin/env python3
 
 import depthai as dai
+from contextlib import ExitStack
 
 # Create pipeline
 pipeline = dai.Pipeline()
 
+# Comment out to disable any cameras
+cam_list = [
+    'rgb',
+    'left',
+    'right',
+    'camd',
+]
+
+cam_socket_opts = {
+    'rgb'  : dai.CameraBoardSocket.RGB,   # Or CAM_A
+    'left' : dai.CameraBoardSocket.LEFT,  # Or CAM_B
+    'right': dai.CameraBoardSocket.RIGHT, # Or CAM_C
+    'camd' : dai.CameraBoardSocket.CAM_D,
+}
+
 # Define sources and outputs
-camRgb = pipeline.createColorCamera()
-monoLeft = pipeline.createMonoCamera()
-monoRight = pipeline.createMonoCamera()
-ve1 = pipeline.createVideoEncoder()
-ve2 = pipeline.createVideoEncoder()
-ve3 = pipeline.createVideoEncoder()
+camRgb, ve, veOut = {}, {}, {}
 
-ve1Out = pipeline.createXLinkOut()
-ve2Out = pipeline.createXLinkOut()
-ve3Out = pipeline.createXLinkOut()
+for c in cam_list:
+    camRgb[c] = pipeline.createColorCamera()
+    ve[c] = pipeline.createVideoEncoder()
+    veOut[c] = pipeline.createXLinkOut()
 
-ve1Out.setStreamName('ve1Out')
-ve2Out.setStreamName('ve2Out')
-ve3Out.setStreamName('ve3Out')
+    # Properties
+    camRgb[c].setBoardSocket(cam_socket_opts[c])
+    if 0: # 4K -> 1080p. Note at most 2 cams could be processed at this rate
+        camRgb[c].setResolution(dai.ColorCameraProperties.SensorResolution.THE_4_K)
+        camRgb[c].setIspScale(1, 2)
+    ve[c].setDefaultProfilePreset(1920, 1080, 30, dai.VideoEncoderProperties.Profile.H264_MAIN)
+    veOut[c].setStreamName(c)
 
-# Properties
-camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_4_K)
-monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
-monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
-
-# Setting to 26fps will trigger error
-ve1.setDefaultProfilePreset(1280, 720, 25, dai.VideoEncoderProperties.Profile.H264_MAIN)
-ve2.setDefaultProfilePreset(3840, 2160, 25, dai.VideoEncoderProperties.Profile.H265_MAIN)
-ve3.setDefaultProfilePreset(1280, 720, 25, dai.VideoEncoderProperties.Profile.H264_MAIN)
-
-# Linking
-monoLeft.out.link(ve1.input)
-camRgb.video.link(ve2.input)
-monoRight.out.link(ve3.input)
-
-ve1.bitstream.link(ve1Out.input)
-ve2.bitstream.link(ve2Out.input)
-ve3.bitstream.link(ve3Out.input)
+    # Linking
+    camRgb[c].video.link(ve[c].input)
+    ve[c].bitstream.link(veOut[c].input)
 
 # Connect to device and start pipeline
 with dai.Device(pipeline) as dev:
 
     # Output queues will be used to get the encoded data from the output defined above
-    outQ1 = dev.getOutputQueue('ve1Out', maxSize=30, blocking=True)
-    outQ2 = dev.getOutputQueue('ve2Out', maxSize=30, blocking=True)
-    outQ3 = dev.getOutputQueue('ve3Out', maxSize=30, blocking=True)
+    outQ, fname, file = {}, {}, {}
+    for c in cam_list:
+        outQ[c] = dev.getOutputQueue(c, maxSize=30, blocking=True)
+        fname[c] = c + '.h264'
 
     # Processing loop
-    with open('mono1.h264', 'wb') as fileMono1H264, open('color.h265', 'wb') as fileColorH265, open('mono2.h264', 'wb') as fileMono2H264:
+    with ExitStack() as stack:
+        for c in cam_list:
+            file[c] = stack.enter_context(open(fname[c], 'wb'))
+            print("Opened for writing:", fname[c])
         print("Press Ctrl+C to stop encoding...")
         while True:
             try:
                 # Empty each queue
-                while outQ1.has():
-                    outQ1.get().getData().tofile(fileMono1H264)
-
-                while outQ2.has():
-                    outQ2.get().getData().tofile(fileColorH265)
-
-                while outQ3.has():
-                    outQ3.get().getData().tofile(fileMono2H264)
+                for c in cam_list:
+                    while outQ[c].has(): outQ[c].get().getData().tofile(file[c])
             except KeyboardInterrupt:
                 break
-
-    print("To view the encoded data, convert the stream file (.h264/.h265) into a video file (.mp4), using commands below:")
-    cmd = "ffmpeg -framerate 25 -i {} -c copy {}"
-    print(cmd.format("mono1.h264", "mono1.mp4"))
-    print(cmd.format("mono2.h264", "mono2.mp4"))
-    print(cmd.format("color.h265", "color.mp4"))
