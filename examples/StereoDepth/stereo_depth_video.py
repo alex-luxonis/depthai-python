@@ -6,7 +6,7 @@ import depthai as dai
 import argparse
 
 #scaling = (1, 1) # no scaling, for OV9782, or even OV9282 on OAK-D (though not good colors)
-scaling = (1280, 1920) # 1920x1080 -> 1280x800, for AR0234
+scaling = (1280, 1920) # 1920x1200 -> 1280x800, for AR0234
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
