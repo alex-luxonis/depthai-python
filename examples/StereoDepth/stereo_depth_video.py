@@ -5,13 +5,16 @@ import numpy as np
 import depthai as dai
 import argparse
 
+#scaling = (1, 1) # no scaling, for OV9782, or even OV9282 on OAK-D (though not good colors)
+scaling = (1280, 1920) # 1920x1080 -> 1280x800, for AR0234
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-res",
     "--resolution",
     type=str,
-    default="720",
-    help="Sets the resolution on mono cameras. Options: 800 | 720 | 400",
+    default="1200",
+    help="Sets the resolution on mono cameras. Options: 1200 | 800 | 720 | 400",
 )
 parser.add_argument(
     "-md",
@@ -71,7 +74,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-resolutionMap = {"800": (1280, 800), "720": (1280, 720), "400": (640, 400)}
+resolutionMap = {"1200": (1920, 1200), "800": (1280, 800), "720": (1280, 720), "400": (640, 400)}
 if args.resolution not in resolutionMap:
     exit("Unsupported resolution!")
 
@@ -178,8 +181,8 @@ def getDisparityFrame(frame):
 print("Creating Stereo Depth pipeline")
 pipeline = dai.Pipeline()
 
-camLeft = pipeline.create(dai.node.MonoCamera)
-camRight = pipeline.create(dai.node.MonoCamera)
+camLeft = pipeline.create(dai.node.ColorCamera)
+camRight = pipeline.create(dai.node.ColorCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
 xoutLeft = pipeline.create(dai.node.XLinkOut)
 xoutRight = pipeline.create(dai.node.XLinkOut)
@@ -191,15 +194,18 @@ xoutRectifRight = pipeline.create(dai.node.XLinkOut)
 camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
 camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 res = (
-    dai.MonoCameraProperties.SensorResolution.THE_800_P
+    dai.ColorCameraProperties.SensorResolution.THE_1200_P
+    if resolution[1] == 1200
+    else dai.ColorCameraProperties.SensorResolution.THE_800_P
     if resolution[1] == 800
-    else dai.MonoCameraProperties.SensorResolution.THE_720_P
+    else dai.ColorCameraProperties.SensorResolution.THE_720_P
     if resolution[1] == 720
-    else dai.MonoCameraProperties.SensorResolution.THE_400_P
+    else dai.ColorCameraProperties.SensorResolution.THE_400_P
 )
-for monoCam in (camLeft, camRight):  # Common config
-    monoCam.setResolution(res)
-    # monoCam.setFps(20.0)
+for cam in (camLeft, camRight):  # Common config
+    cam.setResolution(res)
+    # cam.setFps(20.0)
+    cam.setIspScale(scaling)
 
 stereo.initialConfig.setConfidenceThreshold(245)
 stereo.initialConfig.setMedianFilter(median)  # KERNEL_7x7 default
@@ -216,8 +222,8 @@ xoutDepth.setStreamName("depth")
 xoutRectifLeft.setStreamName("rectifiedLeft")
 xoutRectifRight.setStreamName("rectifiedRight")
 
-camLeft.out.link(stereo.left)
-camRight.out.link(stereo.right)
+camLeft.isp.link(stereo.left)
+camRight.isp.link(stereo.right)
 stereo.syncedLeft.link(xoutLeft.input)
 stereo.syncedRight.link(xoutRight.input)
 stereo.disparity.link(xoutDisparity.input)
@@ -253,11 +259,17 @@ with dai.Device(pipeline) as device:
     while True:
         for q in qList:
             name = q.getName()
-            frame = q.get().getCvFrame()
-            if name == "depth":
-                frame = frame.astype(np.uint16)
-            elif name == "disparity":
-                frame = getDisparityFrame(frame)
+            if name.startswith("rectified"):
+                # TODO fix frame type in firmware, to avoid this hack
+                pkt = q.get()
+                size = (pkt.getHeight(), pkt.getWidth())
+                frame = pkt.getData().reshape(size)
+            else:
+                frame = q.get().getCvFrame()
+                if name == "depth":
+                    frame = frame.astype(np.uint16)
+                elif name == "disparity":
+                    frame = getDisparityFrame(frame)
 
             cv2.imshow(name, frame)
         if cv2.waitKey(1) == ord("q"):
