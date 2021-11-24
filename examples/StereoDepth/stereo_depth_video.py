@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import depthai as dai
 import argparse
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -178,6 +179,33 @@ def getDisparityFrame(frame):
 print("Creating Stereo Depth pipeline")
 pipeline = dai.Pipeline()
 
+camRgb = pipeline.create(dai.node.ColorCamera)
+videoOut = pipeline.create(dai.node.XLinkOut)
+previewOut = pipeline.create(dai.node.XLinkOut)
+videoOut.setStreamName("video")
+previewOut.setStreamName("preview")
+camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+camRgb.setInterleaved(False)
+#camRgb.setIspScale(1, 2)
+camRgb.setPreviewSize(300, 300)
+camRgb.video.link(videoOut.input)
+camRgb.preview.link(previewOut.input)
+
+nnPathDefault = str((Path(__file__).parent / Path('../models/mobilenet-ssd_openvino_2021.4_6shave.blob')).resolve().absolute())
+# MobilenetSSD label texts
+labelMap = ["background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
+            "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
+nn = pipeline.create(dai.node.MobileNetSpatialDetectionNetwork)
+nnOut = pipeline.create(dai.node.XLinkOut)
+nnOut.setStreamName("nn")
+nn.setConfidenceThreshold(0.5)
+nn.setBlobPath(nnPathDefault)
+nn.setNumInferenceThreads(2)
+nn.input.setBlocking(False)
+camRgb.preview.link(nn.input)
+nn.out.link(nnOut.input)
+
 camLeft = pipeline.create(dai.node.MonoCamera)
 camRight = pipeline.create(dai.node.MonoCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
@@ -201,13 +229,14 @@ for monoCam in (camLeft, camRight):  # Common config
     monoCam.setResolution(res)
     # monoCam.setFps(20.0)
 
-stereo.initialConfig.setConfidenceThreshold(200)
+stereo.initialConfig.setConfidenceThreshold(245)
 stereo.initialConfig.setMedianFilter(median)  # KERNEL_7x7 default
 stereo.setRectifyEdgeFillColor(0)  # Black, to better see the cutout
 stereo.setLeftRightCheck(lrcheck)
 # FIXME: RuntimeError: StereoDepth(2) - StereoDepth | ExtendedDisparity is not implemented yet.
 stereo.setExtendedDisparity(extended)
 stereo.setSubpixel(subpixel)
+stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
 
 xoutLeft.setStreamName("left")
 xoutRight.setStreamName("right")
@@ -223,6 +252,7 @@ stereo.syncedRight.link(xoutRight.input)
 stereo.disparity.link(xoutDisparity.input)
 if depth:
     stereo.depth.link(xoutDepth.input)
+    stereo.depth.link(nn.inputDepth)
 if outRectified:
     stereo.rectifiedLeft.link(xoutRectifLeft.input)
     stereo.rectifiedRight.link(xoutRectifRight.input)
@@ -233,8 +263,10 @@ if outRectified:
 streams.append("disparity")
 if depth:
     streams.append("depth")
+    streams.extend(["video", "preview", "nn"])
 
 calibData = dai.Device().readCalibration()
+
 leftMesh, rightMesh = getMesh(calibData)
 if generateMesh:
     meshLeft = list(leftMesh.tobytes())
@@ -248,17 +280,37 @@ if meshDirectory is not None:
 print("Creating DepthAI device")
 with dai.Device(pipeline) as device:
     # Create a receive queue for each stream
-    qList = [device.getOutputQueue(stream, 8, blocking=False) for stream in streams]
+    qList = [device.getOutputQueue(stream, 4, blocking=False) for stream in streams]
 
+    detections = []
+    
+    # nn data (bounding box locations) are in <0..1> range - they need to be normalized with frame width/height
+    def frameNorm(frame, bbox):
+        normVals = np.full(len(bbox), frame.shape[0])
+        normVals[::2] = frame.shape[1]
+        return (np.clip(np.array(bbox), 0, 1) * normVals).astype(int)
+    
     while True:
         for q in qList:
             name = q.getName()
-            frame = q.get().getCvFrame()
-            if name == "depth":
-                frame = frame.astype(np.uint16)
-            elif name == "disparity":
-                frame = getDisparityFrame(frame)
-
-            cv2.imshow(name, frame)
+            pkt = q.tryGet()
+            if pkt is not None:
+                if name == "nn":
+                    detections = pkt.detections
+                else:
+                    frame = pkt.getCvFrame()
+                    if name == "depth":
+                        frame = frame.astype(np.uint16)
+                    elif name == "disparity":
+                        frame = getDisparityFrame(frame)
+                    elif name == "preview":
+                        color = (255, 0, 0)
+                        for detection in detections:
+                            bbox = frameNorm(frame, (detection.xmin, detection.ymin, detection.xmax, detection.ymax))
+                            cv2.putText(frame, labelMap[detection.label], (bbox[0] + 10, bbox[1] + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, color)
+                            cv2.putText(frame, f"{int(detection.confidence * 100)}%", (bbox[0] + 10, bbox[1] + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.5, color)
+                            cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
+        
+                    cv2.imshow(name, frame)
         if cv2.waitKey(1) == ord("q"):
             break
