@@ -4,12 +4,13 @@ import cv2
 import numpy as np
 import depthai as dai
 
-# Optional. If set (True), the ColorCamera is downscaled from 1080p to 720p.
-# Otherwise (False), the aligned depth is automatically upscaled to 1080p
-downscaleColor = True
+if 0: rgb_scale = (1920, 1920)  # 1920x1200 -> 1920x1200
+else: rgb_scale = (1280, 1920)  # 1920x1200 -> 1280x800
+
+if 0: stereo_scale = (1280, 1920)  # 1920x1200 -> 1280x800
+else: stereo_scale = ( 640, 1920)  # 1920x1200 ->  640x400
+
 fps = 30
-# The disparity is computed at this resolution, then upscaled to RGB resolution
-monoResolution = dai.MonoCameraProperties.SensorResolution.THE_400_P
 
 # Create pipeline
 pipeline = dai.Pipeline()
@@ -17,8 +18,8 @@ queueNames = []
 
 # Define sources and outputs
 camRgb = pipeline.create(dai.node.ColorCamera)
-left = pipeline.create(dai.node.MonoCamera)
-right = pipeline.create(dai.node.MonoCamera)
+left = pipeline.create(dai.node.ColorCamera)
+right = pipeline.create(dai.node.ColorCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
 
 rgbOut = pipeline.create(dai.node.XLinkOut)
@@ -31,29 +32,34 @@ queueNames.append("depth")
 
 #Properties
 camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
 camRgb.setFps(fps)
-if downscaleColor: camRgb.setIspScale(2, 3)
+camRgb.setIspScale(rgb_scale)
+
 # For now, RGB needs fixed focus to properly align with depth.
 # This value was used during calibration
-camRgb.initialControl.setManualFocus(130)
+# camRgb.initialControl.setManualFocus(130)
 
-left.setResolution(monoResolution)
+left.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
 left.setBoardSocket(dai.CameraBoardSocket.LEFT)
 left.setFps(fps)
-right.setResolution(monoResolution)
+left.setIspScale(stereo_scale)
+right.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
 right.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 right.setFps(fps)
+right.setIspScale(stereo_scale)
 
 stereo.initialConfig.setConfidenceThreshold(245)
 # LR-check is required for depth alignment
 stereo.setLeftRightCheck(True)
 stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
+# Setting input resolution as temp workaround with color cams
+stereo.setInputResolution(left.getIspSize())
 
 # Linking
 camRgb.isp.link(rgbOut.input)
-left.out.link(stereo.left)
-right.out.link(stereo.right)
+left.isp.link(stereo.left)
+right.isp.link(stereo.right)
 stereo.disparity.link(depthOut.input)
 
 # Connect to device and start pipeline
