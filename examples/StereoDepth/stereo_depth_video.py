@@ -214,6 +214,8 @@ stereo.setLeftRightCheck(lrcheck)
 # FIXME: RuntimeError: StereoDepth(2) - StereoDepth | ExtendedDisparity is not implemented yet.
 stereo.setExtendedDisparity(extended)
 stereo.setSubpixel(subpixel)
+# Setting input resolution as temp workaround with color cams
+stereo.setInputResolution(camLeft.getIspSize())
 
 xoutLeft.setStreamName("left")
 xoutRight.setStreamName("right")
