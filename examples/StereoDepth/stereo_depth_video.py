@@ -173,7 +173,9 @@ def saveMeshFiles(meshLeft, meshRight, outputPath):
 def getDisparityFrame(frame):
     maxDisp = stereo.initialConfig.getMaxDisparity()
     disp = (frame * (255.0 / maxDisp)).astype(np.uint8)
-    disp = cv2.applyColorMap(disp, cv2.COLORMAP_JET)
+    jet_custom = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+    jet_custom[0] = [0, 0, 0]
+    disp = cv2.applyColorMap(disp, jet_custom)
 
     return disp
 

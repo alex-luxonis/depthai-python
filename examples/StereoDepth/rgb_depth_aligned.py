@@ -71,6 +71,9 @@ with dai.Device(pipeline) as device:
     frameRgb = None
     frameDepth = None
 
+    jet_custom = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+    jet_custom[0] = [0, 0, 0]
+
     while True:
         latestPacket = {}
         latestPacket["rgb"] = None
@@ -92,7 +95,7 @@ with dai.Device(pipeline) as device:
             # Optional, extend range 0..95 -> 0..255, for a better visualisation
             if 1: frameDepth = (frameDepth * 255. / maxDisparity).astype(np.uint8)
             # Optional, apply false colorization
-            if 1: frameDepth = cv2.applyColorMap(frameDepth, cv2.COLORMAP_HOT)
+            if 1: frameDepth = cv2.applyColorMap(frameDepth, jet_custom)
             frameDepth = np.ascontiguousarray(frameDepth)
             cv2.imshow("depth", frameDepth)
 
