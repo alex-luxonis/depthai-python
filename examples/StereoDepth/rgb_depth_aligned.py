@@ -32,7 +32,7 @@ queueNames.append("depth")
 
 #Properties
 camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 camRgb.setFps(fps)
 camRgb.setIspScale(rgb_scale)
 
@@ -40,11 +40,11 @@ camRgb.setIspScale(rgb_scale)
 # This value was used during calibration
 # camRgb.initialControl.setManualFocus(130)
 
-left.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
+left.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 left.setBoardSocket(dai.CameraBoardSocket.LEFT)
 left.setFps(fps)
 left.setIspScale(stereo_scale)
-right.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
+right.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 right.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 right.setFps(fps)
 right.setIspScale(stereo_scale)

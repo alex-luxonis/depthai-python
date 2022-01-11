@@ -13,8 +13,8 @@ parser.add_argument(
     "-res",
     "--resolution",
     type=str,
-    default="1200",
-    help="Sets the resolution on mono cameras. Options: 1200 | 800 | 720 | 400",
+    default="1080",
+    help="Sets the resolution on mono cameras. Options: 1200 | 1080 | 800 | 720 | 400",
 )
 parser.add_argument(
     "-md",
@@ -74,7 +74,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-resolutionMap = {"1200": (1920, 1200), "800": (1280, 800), "720": (1280, 720), "400": (640, 400)}
+resolutionMap = {"1200": (1920, 1200), "1080": (1920, 1080), "800": (1280, 800), "720": (1280, 720), "400": (640, 400)}
 if args.resolution not in resolutionMap:
     exit("Unsupported resolution!")
 
@@ -196,12 +196,10 @@ xoutRectifRight = pipeline.create(dai.node.XLinkOut)
 camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
 camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 res = (
-    dai.ColorCameraProperties.SensorResolution.THE_1200_P
-    if resolution[1] == 1200
-    else dai.ColorCameraProperties.SensorResolution.THE_800_P
-    if resolution[1] == 800
-    else dai.ColorCameraProperties.SensorResolution.THE_720_P
-    if resolution[1] == 720
+    dai.ColorCameraProperties.SensorResolution.THE_1200_P if resolution[1] == 1200
+    else dai.ColorCameraProperties.SensorResolution.THE_1080_P if resolution[1] == 1080
+    else dai.ColorCameraProperties.SensorResolution.THE_800_P if resolution[1] == 800
+    else dai.ColorCameraProperties.SensorResolution.THE_720_P if resolution[1] == 720
     else dai.ColorCameraProperties.SensorResolution.THE_400_P
 )
 for cam in (camLeft, camRight):  # Common config
