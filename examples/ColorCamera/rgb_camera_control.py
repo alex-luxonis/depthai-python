@@ -23,7 +23,7 @@ STEP_SIZE = 8
 # Manual exposure/focus/white-balance set step
 EXP_STEP = 500  # us
 ISO_STEP = 50
-LENS_STEP = 3
+LENS_STEP = 1
 WB_STEP = 200
 
 def clamp(num, v0, v1):
@@ -50,8 +50,10 @@ stillMjpegOut.setStreamName('still')
 previewOut.setStreamName('preview')
 
 # Properties
-camRgb.setVideoSize(640, 360)
-camRgb.setPreviewSize(300, 300)
+# TODO camRgb.initialControl.setManualFocus(66)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_4_K)
+#camRgb.setVideoSize(640, 360)
+camRgb.setPreviewSize(640, 360)
 videoEncoder.setDefaultProfilePreset(camRgb.getFps(), dai.VideoEncoderProperties.Profile.MJPEG)
 stillEncoder.setDefaultProfilePreset(1, dai.VideoEncoderProperties.Profile.MJPEG)
 
@@ -84,7 +86,7 @@ with dai.Device(pipeline) as device:
     sendCamConfig = True
 
     # Defaults and limits for manual focus/exposure controls
-    lensPos = 150
+    lensPos = 70
     lensMin = 0
     lensMax = 255
 
