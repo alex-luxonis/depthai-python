@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import depthai as dai
+import time
 
 # Weights to use when blending depth/rgb image (should equal 1.0)
 rgbWeight = 0.4
@@ -23,13 +24,14 @@ def updateBlendWeights(percent_rgb):
 
 # Optional. If set (True), the ColorCamera is downscaled from 1080p to 720p.
 # Otherwise (False), the aligned depth is automatically upscaled to 1080p
-downscaleColor = True
+downscaleColor = False
 fps = 30
 # The disparity is computed at this resolution, then upscaled to RGB resolution
-monoResolution = dai.MonoCameraProperties.SensorResolution.THE_720_P
+monoResolution = dai.MonoCameraProperties.SensorResolution.THE_800_P
 
 # Create pipeline
 pipeline = dai.Pipeline()
+pipeline.setXLinkChunkSize(0)  # << important to increase throughtput!!!
 queueNames = []
 
 # Define sources and outputs
@@ -71,7 +73,7 @@ stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
 camRgb.isp.link(rgbOut.input)
 left.out.link(stereo.left)
 right.out.link(stereo.right)
-stereo.disparity.link(disparityOut.input)
+stereo.depth.link(disparityOut.input)
 
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
@@ -88,6 +90,13 @@ with dai.Device(pipeline) as device:
     cv2.namedWindow(blendedWindowName)
     cv2.createTrackbar('RGB Weight %', blendedWindowName, int(rgbWeight*100), 100, updateBlendWeights)
 
+    counter = {}
+    counter["rgb"] = 0
+    counter["disp"] = 0
+    startTime = {}
+    startTime["rgb"] = time.time()
+    startTime["disp"] = time.time()
+
     while True:
         latestPacket = {}
         latestPacket["rgb"] = None
@@ -96,6 +105,19 @@ with dai.Device(pipeline) as device:
         queueEvents = device.getQueueEvents(("rgb", "disp"))
         for queueName in queueEvents:
             packets = device.getOutputQueue(queueName).tryGetAll()
+            for p in packets:
+                if 0:
+                    latency_ms = (dai.Clock.now() - p.getTimestamp()).total_seconds() * 1000
+                    print("Latency", queueName, latency_ms, "ms")
+                currentTime = time.time()
+                tdiff = currentTime - startTime[queueName]
+                counter[queueName] += 1
+                if tdiff > 1:
+                    fps = counter[queueName] / tdiff
+                    counter[queueName] = 0
+                    startTime[queueName] = currentTime
+                    print("FPS", queueName, fps)
+
             if len(packets) > 0:
                 latestPacket[queueName] = packets[-1]
 
