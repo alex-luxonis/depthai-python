@@ -25,9 +25,9 @@ def updateBlendWeights(percent_rgb):
 # Optional. If set (True), the ColorCamera is downscaled from 1080p to 720p.
 # Otherwise (False), the aligned depth is automatically upscaled to 1080p
 downscaleColor = False
-fps = 30
+fps = 22
 # The disparity is computed at this resolution, then upscaled to RGB resolution
-monoResolution = dai.MonoCameraProperties.SensorResolution.THE_800_P
+monoResolution = dai.MonoCameraProperties.SensorResolution.THE_720_P
 
 # Create pipeline
 pipeline = dai.Pipeline()
@@ -66,6 +66,7 @@ right.setFps(fps)
 
 stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
 # LR-check is required for depth alignment
+stereo.setSubpixel(True)
 stereo.setLeftRightCheck(True)
 stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
 
