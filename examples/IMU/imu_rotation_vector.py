@@ -15,7 +15,7 @@ xlinkOut = pipeline.create(dai.node.XLinkOut)
 xlinkOut.setStreamName("imu")
 
 # enable ROTATION_VECTOR at 400 hz rate
-imu.enableIMUSensor(dai.IMUSensor.ROTATION_VECTOR, 400)
+imu.enableIMUSensor(dai.IMUSensor.ROTATION_VECTOR, 10)
 # above this threshold packets will be sent in batch of X, if the host is not blocked and USB bandwidth is available
 imu.setBatchReportThreshold(1)
 # maximum number of IMU packets in a batch, if it's reached device will block sending until host can receive it
@@ -26,35 +26,43 @@ imu.setMaxBatchReports(10)
 # Link plugins IMU -> XLINK
 imu.out.link(xlinkOut.input)
 
+# Script node
+script = pipeline.create(dai.node.Script)
+script.setScript("""
+    while True:
+        imuData = node.io['imu'].get()
+        imuPackets = imuData.packets
+        for imuPacket in imuPackets:
+            rVvalues = imuPacket.rotationVector
+            ts = rVvalues.timestamp.get().total_seconds()
+            tsDev = rVvalues.tsDevice.get().total_seconds()
+            seq = rVvalues.sequence
+            node.warn(f'Got pkt {seq}, ts {ts}, tsDev {tsDev}')
+""")
+imu.out.link(script.inputs['imu'])
+
 # Pipeline is defined, now we can connect to the device
 with dai.Device(pipeline) as device:
-
-    def timeDeltaToMilliS(delta) -> float:
-        return delta.total_seconds()*1000
-
     # Output queue for imu bulk packets
     imuQueue = device.getOutputQueue(name="imu", maxSize=50, blocking=False)
-    baseTs = None
+    prevDiff = None
     while True:
         imuData = imuQueue.get()  # blocking call, will wait until a new data has arrived
 
         imuPackets = imuData.packets
         for imuPacket in imuPackets:
             rVvalues = imuPacket.rotationVector
-
-            rvTs = rVvalues.timestamp.get()
-            if baseTs is None:
-                baseTs = rvTs
-            rvTs = rvTs - baseTs
-
-            imuF = "{:.06f}"
-            tsF  = "{:.03f}"
-
-            print(f"Rotation vector timestamp: {tsF.format(timeDeltaToMilliS(rvTs))} ms")
-            print(f"Quaternion: i: {imuF.format(rVvalues.i)} j: {imuF.format(rVvalues.j)} "
-                f"k: {imuF.format(rVvalues.k)} real: {imuF.format(rVvalues.real)}")
-            print(f"Accuracy (rad): {imuF.format(rVvalues.rotationVectorAccuracy)}")
-
+            ts = rVvalues.timestamp.get().total_seconds()
+            tsDev = rVvalues.tsDevice.get().total_seconds()
+            seq = rVvalues.sequence
+            print(f'==================== HOST ========================= Got pkt {seq}, ts {ts}, tsDev {tsDev}')
+            if 1: # Just checking timesync...
+                diff = round(ts - tsDev, 6) * 1000
+                if prevDiff != None and prevDiff != diff:
+                    print()
+                    print(f'===== Timesync diff changed!!! ===== delta from previous {diff - prevDiff:.3f} ms')
+                    print()
+                prevDiff = diff
 
         if cv2.waitKey(1) == ord('q'):
             break
