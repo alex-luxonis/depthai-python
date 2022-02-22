@@ -25,8 +25,21 @@ monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 monoRight.out.link(xoutRight.input)
 monoLeft.out.link(xoutLeft.input)
 
+def updateDot(v):
+    global device
+    device.setIrLaserDotProjectorBrightness(v)
+
+def updateFlood(v):
+    global device
+    device.setIrFloodLightBrightness(v)
+
+cv2.namedWindow("left")
+cv2.createTrackbar('dot mA',   "left", 0, 1600, updateDot)    # max 1200. 1600 for limit test
+cv2.createTrackbar('flood mA', "left", 0, 1600, updateFlood)  # max 1500. 1600 for limit test
+
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
+    print("IR drivers:", device.getIrDrivers())
 
     # Output queues will be used to get the grayscale frames from the outputs defined above
     qLeft = device.getOutputQueue(name="left", maxSize=4, blocking=False)
