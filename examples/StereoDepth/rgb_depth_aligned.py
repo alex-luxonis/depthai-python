@@ -65,13 +65,18 @@ right.setFps(fps)
 stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
 # LR-check is required for depth alignment
 stereo.setLeftRightCheck(True)
+if 0: stereo.setSubpixel(True)  # TODO enable for test
 stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
+
+xoutConfMap = pipeline.create(dai.node.XLinkOut)
+xoutConfMap.setStreamName('confidence_map')
 
 # Linking
 camRgb.isp.link(rgbOut.input)
 left.out.link(stereo.left)
 right.out.link(stereo.right)
 stereo.disparity.link(disparityOut.input)
+stereo.confidenceMap.link(xoutConfMap.input)
 
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
@@ -92,8 +97,9 @@ with dai.Device(pipeline) as device:
         latestPacket = {}
         latestPacket["rgb"] = None
         latestPacket["disp"] = None
+        latestPacket["confidence_map"] = None
 
-        queueEvents = device.getQueueEvents(("rgb", "disp"))
+        queueEvents = device.getQueueEvents(("rgb", "disp", "confidence_map"))
         for queueName in queueEvents:
             packets = device.getOutputQueue(queueName).tryGetAll()
             if len(packets) > 0:
@@ -102,6 +108,10 @@ with dai.Device(pipeline) as device:
         if latestPacket["rgb"] is not None:
             frameRgb = latestPacket["rgb"].getCvFrame()
             cv2.imshow(rgbWindowName, frameRgb)
+
+        if latestPacket["confidence_map"] is not None:
+            frameC = latestPacket["confidence_map"].getCvFrame()
+            cv2.imshow("conf", frameC)
 
         if latestPacket["disp"] is not None:
             frameDisp = latestPacket["disp"].getFrame()
