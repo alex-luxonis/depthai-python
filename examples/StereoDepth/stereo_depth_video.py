@@ -78,7 +78,8 @@ resolutionMap = {"1200": (1920, 1200), "800": (1280, 800), "720": (1280, 720), "
 if args.resolution not in resolutionMap:
     exit("Unsupported resolution!")
 
-resolution = resolutionMap[args.resolution]
+resolutionSensor = resolutionMap[args.resolution]
+resolution = (1280, 800)
 meshDirectory = args.mesh_dir  # Output dir for mesh files
 generateMesh = args.load_mesh  # Load mesh files
 
@@ -197,11 +198,11 @@ camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
 camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 res = (
     dai.ColorCameraProperties.SensorResolution.THE_1200_P
-    if resolution[1] == 1200
+    if resolutionSensor[1] == 1200
     else dai.ColorCameraProperties.SensorResolution.THE_800_P
-    if resolution[1] == 800
+    if resolutionSensor[1] == 800
     else dai.ColorCameraProperties.SensorResolution.THE_720_P
-    if resolution[1] == 720
+    if resolutionSensor[1] == 720
     else dai.ColorCameraProperties.SensorResolution.THE_400_P
 )
 for cam in (camLeft, camRight):  # Common config
