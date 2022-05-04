@@ -6,7 +6,7 @@ import depthai as dai
 
 if res == True:
     print(f'Found device with name: {info.desc.name}')
-    bl = dai.DeviceBootloader(info)
+    bl = dai.DeviceBootloader(info, allowFlashingBootloader=True)
     print(f'Version: {bl.getVersion()}')
 
     (ok, err, info) = bl.readApplicationInfo()
