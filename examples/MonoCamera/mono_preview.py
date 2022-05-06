@@ -21,9 +21,37 @@ monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 
+# Simply forwarding frames
+script = pipeline.create(dai.node.Script)
+script.setScript("""
+    while True:
+        frame = node.io['frames'].get()
+        node.io['stream1'].send(frame)
+""")
+
+# Throwing an exception that is caught, then after 5 seconds throw uncaught
+script2 = pipeline.create(dai.node.Script)
+script2.setScript("""
+    import time
+
+    time.sleep(5)
+
+    try:
+        raise Exception("Ex1")
+    except Exception as e:
+        node.warn(f'Caught exception: {e}')
+
+    time.sleep(5)
+
+    node.warn(f'Now throwing uncaught exception...')
+    raise Exception("Ex2")
+""")
+
+
 # Linking
 monoRight.out.link(xoutRight.input)
-monoLeft.out.link(xoutLeft.input)
+monoLeft.out.link(script.inputs['frames'])
+script.outputs['stream1'].link(xoutLeft.input)
 
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
