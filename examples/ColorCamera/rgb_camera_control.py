@@ -49,9 +49,16 @@ videoMjpegOut.setStreamName('video')
 stillMjpegOut.setStreamName('still')
 previewOut.setStreamName('preview')
 
+# Reduce memory usage
+controlIn.setMaxDataSize(1024)
+configIn.setMaxDataSize(1024)
+videoEncoder.setNumFramesPool(3)
+stillEncoder.setNumFramesPool(1)
+
 # Properties
-camRgb.setVideoSize(640, 360)
-camRgb.setPreviewSize(300, 300)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_12_MP)
+#camRgb.setVideoSize(3840, 2160)  # Default 4K for sensor resolution 12MP
+camRgb.setPreviewSize(640, 360)
 videoEncoder.setDefaultProfilePreset(camRgb.getFps(), dai.VideoEncoderProperties.Profile.MJPEG)
 stillEncoder.setDefaultProfilePreset(1, dai.VideoEncoderProperties.Profile.MJPEG)
 
