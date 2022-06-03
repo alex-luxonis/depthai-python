@@ -17,6 +17,10 @@ camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
 camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 camRgb.setVideoSize(1920, 1080)
 
+camRgb.initialControl.setSharpness(0)
+camRgb.initialControl.setLumaDenoise(0)
+camRgb.initialControl.setChromaDenoise(4)
+
 xoutVideo.input.setBlocking(False)
 xoutVideo.input.setQueueSize(1)
 
