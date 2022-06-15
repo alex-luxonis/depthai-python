@@ -105,6 +105,25 @@ print("    Median filtering:  ", median)
 print("    Generating mesh files:  ", generateMesh)
 print("    Outputting mesh files to:  ", meshDirectory)
 
+ctrlWin = "disparity" #"controls"
+slider1 = "norm range 1"
+slider2 = "norm range 2"
+
+normMax = 100
+norm1 = 0
+norm2 = normMax
+
+def onChangeS1(value):
+    global norm1
+    global norm2
+    norm1 = value
+    if norm1 > norm2: cv2.setTrackbarPos(slider2, ctrlWin, norm1)
+
+def onChangeS2(value):
+    global norm1
+    global norm2
+    norm2 = value
+    if norm1 > norm2: cv2.setTrackbarPos(slider1, ctrlWin, norm2)
 
 def getMesh(calibData):
     M1 = np.array(calibData.getCameraIntrinsics(dai.CameraBoardSocket.LEFT, resolution[0], resolution[1]))
@@ -168,9 +187,15 @@ def saveMeshFiles(meshLeft, meshRight, outputPath):
 
 
 def getDisparityFrame(frame):
+    colormap = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+    colormap[0] = [0, 0, 0]  # zero (invalidated) pixels as black
     maxDisp = stereo.initialConfig.getMaxDisparity()
-    disp = (frame * (255.0 / maxDisp)).astype(np.uint8)
-    disp = cv2.applyColorMap(disp, cv2.COLORMAP_JET)
+    if 0:  # initial, full disparity range
+        disp = (frame * (255.0 / maxDisp)).astype(np.uint8)
+    else:  # remap to runtime variable range [dispMin; dispMax]
+        normRange = (norm1*maxDisp/normMax, norm2*maxDisp/normMax)
+        disp = np.interp(frame, normRange, (0, 255)).astype(np.uint8)
+    disp = cv2.applyColorMap(disp, colormap)
 
     return disp
 
@@ -251,6 +276,11 @@ with device:
 
     # Create a receive queue for each stream
     qList = [device.getOutputQueue(stream, 8, blocking=False) for stream in streams]
+
+    cv2.namedWindow(ctrlWin)
+    cv2.resizeWindow(ctrlWin, (100, 200))
+    cv2.createTrackbar(slider1, ctrlWin, norm1, normMax, onChangeS1)
+    cv2.createTrackbar(slider2, ctrlWin, norm2, normMax, onChangeS2)
 
     while True:
         for q in qList:

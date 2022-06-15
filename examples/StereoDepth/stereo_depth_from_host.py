@@ -20,6 +20,25 @@ if not Path(datasetDefault).exists():
     import sys
     raise FileNotFoundError(f'Required file/s not found, please run "{sys.executable} install_requirements.py"')
 
+ctrlWin = "depth" #"controls"
+slider1 = "norm range 1"
+slider2 = "norm range 2"
+
+normMax = 100
+norm1 = 0
+norm2 = normMax
+
+def onChangeS1(value):
+    global norm1
+    global norm2
+    norm1 = value
+    if norm1 > norm2: cv2.setTrackbarPos(slider2, ctrlWin, norm1)
+
+def onChangeS2(value):
+    global norm1
+    global norm2
+    norm2 = value
+    if norm1 > norm2: cv2.setTrackbarPos(slider1, ctrlWin, norm2)
 
 
 class StereoConfigHandler:
@@ -589,8 +608,15 @@ def convertToCv2Frame(name, image, config):
         with np.errstate(divide='ignore'):
             frame = dispScaleFactor / frame
 
-        frame = (frame * 255. / dispIntegerLevels).astype(np.uint8)
-        frame = cv2.applyColorMap(frame, cv2.COLORMAP_HOT)
+        colormap = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
+        colormap[0] = [0, 0, 0]  # zero (invalidated) pixels as black
+
+        if 0:  # initial, full disparity range
+            frame = (frame * 255. / dispIntegerLevels).astype(np.uint8)
+        else:  # remap to runtime variable range [dispMin; dispMax]
+            normRange = (norm1*dispIntegerLevels/normMax, norm2*dispIntegerLevels/normMax)
+            frame = np.interp(frame, normRange, (0, 255)).astype(np.uint8)
+        frame = cv2.applyColorMap(frame, colormap)
     elif 'confidence_map' in name:
         pass
     elif name == 'disparity_cost_dump':
@@ -608,6 +634,11 @@ def convertToCv2Frame(name, image, config):
 print("Connecting and starting the pipeline")
 # Connect to device and start pipeline
 with dai.Device(pipeline) as device:
+
+    cv2.namedWindow(ctrlWin)
+    cv2.resizeWindow(ctrlWin, (100, 200))
+    cv2.createTrackbar(slider1, ctrlWin, norm1, normMax, onChangeS1)
+    cv2.createTrackbar(slider2, ctrlWin, norm2, normMax, onChangeS2)
 
     stereoDepthConfigInQueue = device.getInputQueue("stereoDepthConfig")
     inStreams = ['in_right', 'in_left']
