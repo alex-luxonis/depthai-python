@@ -20,6 +20,11 @@ AUX_GPIO_DIR = 6
 if 1:  # Fix up GPIO 61 being driven output-low from FW initialization
     GPIO.setup(61, GPIO.IN, GPIO.PULL_NONE)
 
+if 0:  # Change to 1 to enable 5V power output on VBUSIN pin
+    VBUS_OUT_GPIO_CTRL = 9
+    GPIO.setup(VBUS_OUT_GPIO_CTRL, GPIO.OUT, GPIO.PULL_NONE)
+    GPIO.write(VBUS_OUT_GPIO_CTRL, 1)  # Enable 5V output
+
 if auxOutput:
     outVal = 0
     GPIO.setup(AUX_GPIO_3V3, GPIO.OUT, GPIO.PULL_NONE)
