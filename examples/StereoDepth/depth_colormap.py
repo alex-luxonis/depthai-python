@@ -15,18 +15,20 @@ lr_check = True
 pipeline = dai.Pipeline()
 
 # Define sources and outputs
-monoLeft = pipeline.create(dai.node.MonoCamera)
-monoRight = pipeline.create(dai.node.MonoCamera)
+monoLeft = pipeline.create(dai.node.ColorCamera)
+monoRight = pipeline.create(dai.node.ColorCamera)
 depth = pipeline.create(dai.node.StereoDepth)
 xout = pipeline.create(dai.node.XLinkOut)
 
 xout.setStreamName("disparity")
 
 # Properties
-monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+monoLeft.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
 monoLeft.setCamera("left")
-monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+monoLeft.setIspScale(800, 1200)
+monoRight.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1200_P)
 monoRight.setCamera("right")
+monoRight.setIspScale(800, 1200)
 
 # Create a node that will produce the depth map (using disparity output as it's easier to visualize depth this way)
 depth.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
@@ -40,10 +42,11 @@ depth.setSubpixel(subpixel)
 colormap = pipeline.create(dai.node.ImageManip)
 colormap.initialConfig.setColormap(dai.Colormap.STEREO_TURBO, depth.initialConfig.getMaxDisparity())
 colormap.initialConfig.setFrameType(dai.ImgFrame.Type.NV12)
+colormap.setMaxOutputFrameSize(1280*800*3//2)
 
 # Linking
-monoLeft.out.link(depth.left)
-monoRight.out.link(depth.right)
+monoLeft.isp.link(depth.left)
+monoRight.isp.link(depth.right)
 depth.disparity.link(colormap.inputImage)
 colormap.out.link(xout.input)
 
