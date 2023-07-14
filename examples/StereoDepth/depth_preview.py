@@ -6,8 +6,8 @@ import numpy as np
 
 # Closer-in minimum depth, disparity range is doubled (from 95 to 190):
 extended_disparity = False
-# Better accuracy for longer distance, fractional disparity 32-levels:
-subpixel = False
+# Better accuracy for longer distance, fractional disparity 32-levels. Subpixel always enabled on RVC3
+subpixel = True
 # Better handling for occlusions:
 lr_check = True
 
@@ -15,17 +15,17 @@ lr_check = True
 pipeline = dai.Pipeline()
 
 # Define sources and outputs
-monoLeft = pipeline.create(dai.node.MonoCamera)
-monoRight = pipeline.create(dai.node.MonoCamera)
+monoLeft = pipeline.create(dai.node.ColorCamera)
+monoRight = pipeline.create(dai.node.ColorCamera)
 depth = pipeline.create(dai.node.StereoDepth)
 xout = pipeline.create(dai.node.XLinkOut)
 
 xout.setStreamName("disparity")
 
 # Properties
-monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+monoLeft.setResolution(dai.ColorCameraProperties.SensorResolution.THE_800_P)
 monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
-monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+monoRight.setResolution(dai.ColorCameraProperties.SensorResolution.THE_800_P)
 monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 
 # Create a node that will produce the depth map (using disparity output as it's easier to visualize depth this way)
@@ -46,8 +46,8 @@ config.costAggregation.localAggregationMode = dai.StereoDepthConfig.CostAggregat
 depth.initialConfig.set(config)
 
 # Linking
-monoLeft.out.link(depth.left)
-monoRight.out.link(depth.right)
+monoLeft.isp.link(depth.left)
+monoRight.isp.link(depth.right)
 depth.disparity.link(xout.input)
 
 # Connect to device and start pipeline

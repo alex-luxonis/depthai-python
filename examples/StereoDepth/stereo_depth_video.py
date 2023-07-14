@@ -10,7 +10,7 @@ parser.add_argument(
     "-res",
     "--resolution",
     type=str,
-    default="720",
+    default="800",
     help="Sets the resolution on mono cameras. Options: 800 | 720 | 400",
 )
 parser.add_argument(
@@ -37,7 +37,7 @@ parser.add_argument(
 parser.add_argument(
     "-lr",
     "--lrcheck",
-    default=False,
+    default=True,
     action="store_true",
     help="Better handling for occlusions",
 )
@@ -51,7 +51,7 @@ parser.add_argument(
 parser.add_argument(
     "-s",
     "--subpixel",
-    default=False,
+    default=True,
     action="store_true",
     help="Better accuracy for longer distance, fractional disparity 32-levels",
 )
@@ -178,8 +178,8 @@ def getDisparityFrame(frame):
 print("Creating Stereo Depth pipeline")
 pipeline = dai.Pipeline()
 
-camLeft = pipeline.create(dai.node.MonoCamera)
-camRight = pipeline.create(dai.node.MonoCamera)
+camLeft = pipeline.create(dai.node.ColorCamera)
+camRight = pipeline.create(dai.node.ColorCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
 xoutLeft = pipeline.create(dai.node.XLinkOut)
 xoutRight = pipeline.create(dai.node.XLinkOut)
@@ -191,11 +191,9 @@ xoutRectifRight = pipeline.create(dai.node.XLinkOut)
 camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
 camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 res = (
-    dai.MonoCameraProperties.SensorResolution.THE_800_P
+    dai.ColorCameraProperties.SensorResolution.THE_800_P
     if resolution[1] == 800
-    else dai.MonoCameraProperties.SensorResolution.THE_720_P
-    if resolution[1] == 720
-    else dai.MonoCameraProperties.SensorResolution.THE_400_P
+    else dai.ColorCameraProperties.SensorResolution.THE_720_P
 )
 for monoCam in (camLeft, camRight):  # Common config
     monoCam.setResolution(res)
@@ -215,8 +213,8 @@ xoutDepth.setStreamName("depth")
 xoutRectifLeft.setStreamName("rectifiedLeft")
 xoutRectifRight.setStreamName("rectifiedRight")
 
-camLeft.out.link(stereo.left)
-camRight.out.link(stereo.right)
+camLeft.isp.link(stereo.left)
+camRight.isp.link(stereo.right)
 stereo.syncedLeft.link(xoutLeft.input)
 stereo.syncedRight.link(xoutRight.input)
 stereo.disparity.link(xoutDisparity.input)
