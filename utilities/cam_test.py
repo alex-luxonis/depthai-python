@@ -255,7 +255,7 @@ for c in cam_list:
         cam[c].out.link(xout[c].input)
     cam[c].setBoardSocket(cam_socket_opts[c])
     # Num frames to capture on trigger, with first to be discarded (due to degraded quality)
-    # cam[c].initialControl.setExternalTrigger(2, 1)
+    cam[c].initialControl.setExternalTrigger(1, 0)
     # cam[c].initialControl.setStrobeExternal(48, 1)
     # cam[c].initialControl.setFrameSyncMode(dai.CameraControl.FrameSyncMode.INPUT)
 
@@ -287,13 +287,17 @@ def exit_cleanly(signum, frame):
 
 signal.signal(signal.SIGINT, exit_cleanly)
 
+config = dai.Device.Config()
+# Disable FFC MCLK output, to not interfere with XTRIG on RPi GS Cam 
+config.board.gpio[44] = dai.BoardConfig.GPIO(dai.BoardConfig.GPIO.INPUT, dai.BoardConfig.GPIO.Level.HIGH)  # CAM_A clock
 
 # Pipeline is defined, now we can connect to the device
 device = dai.Device.getDeviceByMxId(args.device)
-dai_device_args = [pipeline]
+dai_device_args = []
 if device[0]:
     dai_device_args.append(device[1])
-with dai.Device(*dai_device_args) as device:
+with dai.Device(config, *dai_device_args) as device:
+    device.startPipeline(pipeline)
     # print('Connected cameras:', [c.name for c in device.getConnectedCameras()])
     print('Connected cameras:')
     cam_name = {}
