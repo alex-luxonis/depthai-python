@@ -330,7 +330,7 @@ with dai.Device(*dai_device_args) as device:
     tofCfgQueue = device.getInputQueue('tofConfig')
 
     # Manual exposure/focus set step
-    EXP_STEP = 500  # us
+    EXP_STEP = 10  # us
     ISO_STEP = 50
     LENS_STEP = 3
     DOT_STEP = 100
@@ -343,11 +343,11 @@ with dai.Device(*dai_device_args) as device:
     lensMin = 0
     lensMax = 255
 
-    expTime = 20000
-    expMin = 1
+    expTime = 100
+    expMin = 10
     expMax = 33000
 
-    sensIso = 800
+    sensIso = 100
     sensMin = 100
     sensMax = 1600
 
@@ -415,10 +415,11 @@ with dai.Device(*dai_device_args) as device:
                 if capture:
                     capture_file_info = ('capture_' + c + '_' + cam_name[cam_socket_opts[cam_skt].name]
                          + '_' + str(width) + 'x' + str(height)
+                         + '_' + capture_time
                          + '_exp_' + str(int(pkt.getExposureTime().total_seconds()*1e6))
                          + '_iso_' + str(pkt.getSensitivity())
                          + '_lens_' + str(pkt.getLensPosition())
-                         + '_' + capture_time
+                         + '_' + str(pkt.getColorTemperature()) + 'K'
                          + '_' + str(pkt.getSequenceNum())
                         )
                     capture_list.remove(c)
