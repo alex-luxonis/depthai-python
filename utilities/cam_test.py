@@ -93,6 +93,8 @@ parser.add_argument('-tofmedian', '--tof-median', choices=[0,3,5,7], default=5, 
                     help="ToF median filter kernel size")
 parser.add_argument('-rgbprev', '--rgb-preview', action='store_true',
                     help="Show RGB `preview` stream instead of full size `isp`")
+parser.add_argument('-show', '--show-meta', action='store_true',
+                    help="List frame metadata (seqno, timestamp, exp, iso etc). Can also toggle with `\`")
 
 parser.add_argument('-d', '--device', default="", type=str,
                     help="Optional MX ID of the device to connect to.")
@@ -257,9 +259,13 @@ for c in cam_list:
         cam[c].out.link(xout[c].input)
     cam[c].setBoardSocket(cam_socket_opts[c])
     # Num frames to capture on trigger, with first to be discarded (due to degraded quality)
-    # cam[c].initialControl.setExternalTrigger(2, 1)
+    # Note: Only OV9282/9782 supports dropping frames. For AR0234 the arguments passed here have no effect
+    # Note2: in this mode it's best to set sensor FPS as max supported (e.g 60) to avoid missed triggers,
+    # as exposure starts immediately after trigger and is not overlapped with previous frame MIPI readout
+    #cam[c].initialControl.setExternalTrigger(1, 0)
     # cam[c].initialControl.setStrobeExternal(48, 1)
-    # cam[c].initialControl.setFrameSyncMode(dai.CameraControl.FrameSyncMode.INPUT)
+    # Note: setFrameSyncMode takes priority over setExternalTrigger (if both are set)
+    cam[c].initialControl.setFrameSyncMode(dai.CameraControl.FrameSyncMode.INPUT)
 
     # cam[c].initialControl.setManualExposure(15000, 400) # exposure [us], iso
     # When set, takes effect after the first 2 frames
@@ -278,6 +284,68 @@ for c in cam_list:
         streams.append(raw_name)
         cam[c].raw.link(xout_raw[c].input)
         cam[c].setRawOutputPacked(False)
+
+# FSYNC signal generator on OAK-FFC-4P by RVC2 GPIO toggle
+script = pipeline.create(dai.node.Script)
+script.setProcessor(dai.ProcessorType.LEON_CSS)
+script.setScript("""
+import time
+import GPIO
+
+# Script static arguments
+fps = %f
+
+calib = Device.readCalibration2().getEepromData()
+prodName  = calib.productName
+boardName = calib.boardName
+boardRev  = calib.boardRev
+
+node.warn(f'Product name  : {prodName}') 
+node.warn(f'Board name    : {boardName}') 
+node.warn(f'Board revision: {boardRev}')
+
+revision = -1
+# Very basic parsing here, TODO improve
+if len(boardRev) >= 2 and boardRev[0] == 'R':
+    revision = int(boardRev[1])
+node.warn(f'Parsed revision number: {revision}')
+
+# Defaults for OAK-FFC-4P older revisions (<= R5)
+GPIO_FSIN_2LANE = 41  # COM_AUX_IO2
+GPIO_FSIN_4LANE = 40
+GPIO_FSIN_MODE_SELECT = 6  # Drive 1 to tie together FSIN_2LANE and FSIN_4LANE
+
+if revision >= 6:
+    GPIO_FSIN_2LANE = 41  # still COM_AUX_IO2, no PWM capable
+    GPIO_FSIN_4LANE = 42  # also not PWM capable
+    GPIO_FSIN_MODE_SELECT = 38  # Drive 1 to tie together FSIN_2LANE and FSIN_4LANE
+# Note: on R7 GPIO_FSIN_MODE_SELECT is pulled up, driving high isn't necessary (but fine to do)
+
+# GPIO initialization
+GPIO.setup(GPIO_FSIN_2LANE, GPIO.OUT)
+GPIO.write(GPIO_FSIN_2LANE, 0)
+
+GPIO.setup(GPIO_FSIN_4LANE, GPIO.IN)
+
+GPIO.setup(GPIO_FSIN_MODE_SELECT, GPIO.OUT)
+GPIO.write(GPIO_FSIN_MODE_SELECT, 1)
+
+period = 1 / fps
+active = 0.001
+
+node.warn(f'FPS: {fps}  Period: {period}')
+
+withInterrupts = False
+if withInterrupts:
+    node.critical(f'[TODO] FSYNC with timer interrupts (more precise) not implemented')
+else:
+    overhead = 0.003  # Empirical, TODO add thread priority option!
+    while True:
+        GPIO.write(GPIO_FSIN_2LANE, 1)
+        time.sleep(active)
+        GPIO.write(GPIO_FSIN_2LANE, 0)
+        time.sleep(period - active - overhead)
+""" % (args.fps))
 
 if args.camera_tuning:
     pipeline.setCameraTuningBlobPath(str(args.camera_tuning))
@@ -371,7 +439,7 @@ with dai.Device(*dai_device_args) as device:
     luma_denoise = 0
     chroma_denoise = 0
     control = 'none'
-    show = False
+    show = args.show_meta
 
     jet_custom = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
     jet_custom[0] = [0, 0, 0]
@@ -402,7 +470,7 @@ with dai.Device(*dai_device_args) as device:
                         frame = cv2.normalize(frame, frame, alpha=255, beta=0, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
                         frame = cv2.applyColorMap(frame, jet_custom)
                 if show:
-                    txt = f"[{c:5}, {pkt.getSequenceNum():4}] "
+                    txt = f"[{c:5}, {pkt.getSequenceNum():4}, {pkt.getTimestamp().total_seconds():.6f}] "
                     txt += f"Exp: {pkt.getExposureTime().total_seconds()*1000:6.3f} ms, "
                     txt += f"ISO: {pkt.getSensitivity():4}, "
                     txt += f"Lens pos: {pkt.getLensPosition():3}, "
