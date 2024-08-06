@@ -28,7 +28,7 @@ def updateBlendWeights(percent_rgb):
 
 fps = 30
 # The disparity is computed at this resolution, then upscaled to RGB resolution
-monoResolution = dai.MonoCameraProperties.SensorResolution.THE_720_P
+monoResolution = dai.ColorCameraProperties.SensorResolution.THE_800_P
 
 # Create pipeline
 pipeline = dai.Pipeline()
@@ -36,9 +36,8 @@ device = dai.Device()
 queueNames = []
 
 # Define sources and outputs
-camRgb = pipeline.create(dai.node.Camera)
-left = pipeline.create(dai.node.MonoCamera)
-right = pipeline.create(dai.node.MonoCamera)
+left = pipeline.create(dai.node.ColorCamera)
+right = pipeline.create(dai.node.ColorCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
 
 rgbOut = pipeline.create(dai.node.XLinkOut)
@@ -50,24 +49,13 @@ disparityOut.setStreamName("disp")
 queueNames.append("disp")
 
 #Properties
-rgbCamSocket = dai.CameraBoardSocket.CAM_A
+rgbCamSocket = dai.CameraBoardSocket.CAM_B
 
-camRgb.setBoardSocket(rgbCamSocket)
-camRgb.setSize(1280, 720)
-camRgb.setFps(fps)
-
-# For now, RGB needs fixed focus to properly align with depth.
-# This value was used during calibration
-try:
-    calibData = device.readCalibration2()
-    lensPosition = calibData.getLensPosition(rgbCamSocket)
-    if lensPosition:
-        camRgb.initialControl.setManualFocus(lensPosition)
-except:
-    raise
+left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 left.setResolution(monoResolution)
 left.setCamera("left")
 left.setFps(fps)
+right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 right.setResolution(monoResolution)
 right.setCamera("right")
 right.setFps(fps)
@@ -78,15 +66,15 @@ stereo.setLeftRightCheck(True)
 stereo.setDepthAlign(rgbCamSocket)
 
 # Linking
-camRgb.video.link(rgbOut.input)
-left.out.link(stereo.left)
-right.out.link(stereo.right)
+left.isp.link(rgbOut.input)
+left.isp.link(stereo.left)
+right.isp.link(stereo.right)
 stereo.disparity.link(disparityOut.input)
 
-camRgb.setMeshSource(dai.CameraProperties.WarpMeshSource.CALIBRATION)
 if alpha is not None:
-    camRgb.setCalibrationAlpha(alpha)
-    stereo.setAlphaScaling(alpha)
+    # TODO
+    #stereo.setAlphaScaling(alpha)
+    pass
 
 # Connect to device and start pipeline
 with device:
