@@ -124,6 +124,25 @@ print("    Median filtering:  ", median)
 print("    Generating mesh files:  ", generateMesh)
 print("    Outputting mesh files to:  ", meshDirectory)
 
+depth_x = 0
+depth_y = 0
+depth_value = 0
+def get_pixel_coord(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        global depth_x, depth_y
+        depth_x = x
+        depth_y = y
+        print(f"clicked at xy {x} {y}")
+
+def draw_on_frame(frame, name, value, x, y):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    msg = f'{value/1000:.3f}m'
+    black = (0,0,0)
+    white = (65535,65535,65535) if name == 'depth' else (255,255,255)
+    cv2.circle(frame, (depth_x, depth_y), radius=4, color=black, thickness=2)
+    cv2.circle(frame, (depth_x, depth_y), radius=2, color=white, thickness=2)
+    cv2.putText(frame, msg, (depth_x+3, depth_y+8), font, 1, black, 4, cv2.LINE_AA)
+    cv2.putText(frame, msg, (depth_x+3, depth_y+8), font, 1, white, 2, cv2.LINE_AA)
 
 def getMesh(calibData):
     M1 = np.array(calibData.getCameraIntrinsics(dai.CameraBoardSocket.CAM_B, resolution[0], resolution[1]))
@@ -209,11 +228,15 @@ xoutRectifLeft = pipeline.create(dai.node.XLinkOut)
 xoutRectifRight = pipeline.create(dai.node.XLinkOut)
 
 if args.swap_left_right:
-    camLeft.setCamera("right")
-    camRight.setCamera("left")
+    #camLeft.setCamera("right")
+    #camRight.setCamera("left")
+    camLeft.setBoardSocket(dai.CameraBoardSocket.RIGHT)
+    camRight.setBoardSocket(dai.CameraBoardSocket.LEFT)
 else:
-    camLeft.setCamera("left")
-    camRight.setCamera("right")
+    #camLeft.setCamera("left")
+    #camRight.setCamera("right")
+    camLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
+    camRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 
 for monoCam in (camLeft, camRight):  # Common config
     monoCam.setResolution(resolution['res'])
@@ -242,7 +265,7 @@ camLeft.out.link(stereo.left)
 camRight.out.link(stereo.right)
 stereo.syncedLeft.link(xoutLeft.input)
 stereo.syncedRight.link(xoutRight.input)
-stereo.disparity.link(xoutDisparity.input)
+#stereo.disparity.link(xoutDisparity.input)
 if depth:
     stereo.depth.link(xoutDepth.input)
 if outRectified:
@@ -252,9 +275,16 @@ if outRectified:
 streams = ["left", "right"]
 if outRectified:
     streams.extend(["rectifiedLeft", "rectifiedRight"])
-streams.append("disparity")
+#streams.append("disparity")
 if depth:
     streams.append("depth")
+
+# interactive windows
+depth_aligned_name = 'rectifiedRight'  #TODO is this correct or needs to be rectifiedLeft
+windows = ['depth', 'preview', 'preview_color', depth_aligned_name]
+for w in windows:
+    cv2.namedWindow(w)
+    cv2.setMouseCallback(w, get_pixel_coord)
 
 cvColorMap = cv2.applyColorMap(np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET)
 cvColorMap[0] = [0, 0, 0]
@@ -271,9 +301,31 @@ with device:
             frame = q.get().getCvFrame()
             if name == "depth":
                 frame = frame.astype(np.uint16)
-            elif name == "disparity":
-                frame = getDisparityFrame(frame, cvColorMap)
+                depth_value = frame[depth_y, depth_x]
 
-            cv2.imshow(name, frame)
+                # frame = (frame // 10).clip(0, 255).astype(np.uint8) # tmp cm
+
+                # inverted depth preview, TODO improve
+                preview = (2 * 65535 // frame).clip(0, 255).astype(np.uint8)
+                preview_color = cv2.applyColorMap(preview, cvColorMap)
+
+                frames = {}
+                frames['depth'] = frame
+                frames['preview'] = preview
+                frames['preview_color'] = preview_color
+
+                for w in windows:
+                    if w == depth_aligned_name: continue  # Handled separately
+                    draw_on_frame(frames[w], w, depth_value, depth_x, depth_y)
+                    cv2.imshow(w, frames[w])
+
+            elif name == "disparity":
+                print('Should not be printed!')
+                frame = getDisparityFrame(frame, cvColorMap)
+                cv2.imshow(name, frame)
+            else:
+                if name == depth_aligned_name:
+                    draw_on_frame(frame, name, depth_value, depth_x, depth_y)
+                cv2.imshow(name, frame)
         if cv2.waitKey(1) == ord("q"):
             break
