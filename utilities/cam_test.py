@@ -358,9 +358,13 @@ with dai.Device(*dai_device_args) as device:
             cam[c].out.link(xout[c].input)
         cam[c].setBoardSocket(cam_socket_opts[c])
         # Num frames to capture on trigger, with first to be discarded (due to degraded quality)
-        # cam[c].initialControl.setExternalTrigger(2, 1)
+        # Note: Only OV9282/9782 supports dropping frames. For AR0234 the arguments passed here have no effect
+        # Note2: in this mode it's best to set sensor FPS as max supported (e.g 60) to avoid missed triggers,
+        # as exposure starts immediately after trigger and is not overlapped with previous frame MIPI readout
+        # cam[c].initialControl.setExternalTrigger(1, 0)
         # cam[c].initialControl.setStrobeExternal(48, 1)
-        # cam[c].initialControl.setFrameSyncMode(dai.CameraControl.FrameSyncMode.INPUT)
+        # Note: setFrameSyncMode takes priority over setExternalTrigger (if both are set)
+        cam[c].initialControl.setFrameSyncMode(dai.CameraControl.FrameSyncMode.INPUT)
 
         # cam[c].initialControl.setManualExposure(15000, 400) # exposure [us], iso
         # When set, takes effect after the first 2 frames
@@ -389,6 +393,76 @@ with dai.Device(*dai_device_args) as device:
             streams.append(raw_name)
             cam[c].raw.link(xout_raw[c].input)
             cam[c].setRawOutputPacked(False)
+
+    # FSYNC setup on OAK-FFC-4P
+    script = pipeline.create(dai.node.Script)
+    script.setProcessor(dai.ProcessorType.LEON_CSS)
+    script.setScript("""
+    import time
+    import GPIO
+
+    # Note: this doesn't work reliably for sensors like OV9282
+    enableFsyncGenByGpio = False
+
+    # Script static arguments
+    fps = %f
+
+    calib = Device.readCalibration2().getEepromData()
+    prodName  = calib.productName
+    boardName = calib.boardName
+    boardRev  = calib.boardRev
+
+    node.warn(f'Product name  : {prodName}') 
+    node.warn(f'Board name    : {boardName}') 
+    node.warn(f'Board revision: {boardRev}')
+
+    revision = -1
+    # Very basic parsing here, TODO improve
+    if len(boardRev) >= 2 and boardRev[0] == 'R':
+        revision = int(boardRev[1])
+    node.warn(f'Parsed revision number: {revision}')
+
+    # Defaults for OAK-FFC-4P older revisions (<= R5)
+    GPIO_FSIN_2LANE = 41  # COM_AUX_IO2
+    GPIO_FSIN_4LANE = 40
+    GPIO_FSIN_MODE_SELECT = 6  # Drive 1 to tie together FSIN_2LANE and FSIN_4LANE
+
+    if revision >= 6:
+        GPIO_FSIN_2LANE = 41  # still COM_AUX_IO2, no PWM capable
+        GPIO_FSIN_4LANE = 42  # also not PWM capable
+        GPIO_FSIN_MODE_SELECT = 38  # Drive 1 to tie together FSIN_2LANE and FSIN_4LANE
+    # Note: on R7 GPIO_FSIN_MODE_SELECT is pulled up, driving high isn't necessary (but fine to do)
+
+    # GPIO initialization
+    if enableFsyncGenByGpio:
+        GPIO.setup(GPIO_FSIN_2LANE, GPIO.OUT)
+        GPIO.write(GPIO_FSIN_2LANE, 0)
+    else:
+        # IN not necessary, should be default
+        GPIO.setup(GPIO_FSIN_2LANE, GPIO.IN)
+
+    GPIO.setup(GPIO_FSIN_4LANE, GPIO.IN)
+
+    GPIO.setup(GPIO_FSIN_MODE_SELECT, GPIO.OUT)
+    GPIO.write(GPIO_FSIN_MODE_SELECT, 1)
+
+    period = 1 / fps
+    active = 0.001
+
+    node.warn(f'FPS: {fps}  Period: {period}')
+
+    if enableFsyncGenByGpio:
+        withInterrupts = False
+        if withInterrupts:
+            node.critical(f'[TODO] FSYNC with timer interrupts (more precise) not implemented')
+        else:
+            overhead = 0.003  # Empirical, TODO add thread priority option!
+            while True:
+                GPIO.write(GPIO_FSIN_2LANE, 1)
+                time.sleep(active)
+                GPIO.write(GPIO_FSIN_2LANE, 0)
+                time.sleep(period - active - overhead)
+    """ % (args.fps))
 
     if args.camera_tuning:
         pipeline.setCameraTuningBlobPath(str(args.camera_tuning))
